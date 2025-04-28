@@ -1,0 +1,14 @@
+# .gitignore
+/data/
+*.nii
+*.nii.gz
+*.h5
+*.zip
+__pycache__/
+*.pyc
+.DS_Store
+.env
+Task08_HepaticVessel/imagesTr/
+Task08_HepaticVessel/labelsTr/
+2D_Sliced_Images/
+/2D_Sliced_Masks
