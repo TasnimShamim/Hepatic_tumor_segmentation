@@ -138,7 +138,7 @@ def build_unet_model(input_shape, num_classes):
 
     outputs = layers.Conv2D(num_classes, (1, 1), activation='softmax')(u3)
 
-    return keras.Model(inputs, outputs)
+    return keras.Model(inputs, outputs) 
 
 # Dice Loss
 def dice_loss(y_true, y_pred):
