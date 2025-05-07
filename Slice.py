@@ -7,7 +7,7 @@ import cv2
 IMG_SAVE_DIR = '2D_Sliced_Images/'
 MASK_SAVE_DIR = '2D_Sliced_Masks/'
 IMG_SIZE = (256, 256)  # Resize if needed
-CLASS_LABELS_TO_KEEP = [1, 2]  # Keep slices that contain vessels or tumors
+REQUIRED_CLASSES = [0, 1, 2]  # Only keep slices with all three classes
 
 os.makedirs(IMG_SAVE_DIR, exist_ok=True)
 os.makedirs(MASK_SAVE_DIR, exist_ok=True)
@@ -33,9 +33,10 @@ def slice_and_filter(image_path, mask_path, base_filename):
         img_resized = cv2.resize(img_slice, IMG_SIZE, interpolation=cv2.INTER_LINEAR)
         mask_resized = cv2.resize(mask_slice, IMG_SIZE, interpolation=cv2.INTER_NEAREST).astype(np.uint8)
 
-        # Check if the slice contains class 1 or 2
-        if not any(val in np.unique(mask_resized) for val in CLASS_LABELS_TO_KEEP):
-            continue  # Skip slice if no relevant labels
+        # Check if the slice contains all required classes
+        unique_vals = np.unique(mask_resized)
+        if not all(cls in unique_vals for cls in REQUIRED_CLASSES):
+            continue  # Skip if any class is missing
 
         # Prepare filenames
         img_filename = os.path.join(IMG_SAVE_DIR, f"{base_filename}_slice_{i}.png")

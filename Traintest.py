@@ -26,6 +26,41 @@ mask_files = sorted([os.path.join(MASK_PATH, f) for f in os.listdir(MASK_PATH) i
 train_images, test_images, train_masks, test_masks = train_test_split(image_files, mask_files, test_size=0.2, random_state=42)
 train_images, val_images, train_masks, val_masks = train_test_split(train_images, train_masks, test_size=0.25, random_state=42)
 
+# ✅ Preview one random CT scan and ground truth mask
+def preview_loaded_image_and_mask(image_path, mask_path):
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE) / 255.0
+    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+
+    # Convert to class labels
+    mask_class = np.zeros_like(mask)
+    mask_class[mask == 0] = 0
+    mask_class[mask == 128] = 1
+    mask_class[mask == 255] = 2
+
+    # Color map: 0 = black, 1 = cyan, 2 = red
+    color_mask = np.zeros((*mask_class.shape, 3), dtype=np.uint8)
+    color_mask[mask_class == 1] = [0, 255, 255]  # Cyan
+    color_mask[mask_class == 2] = [255, 0, 0]    # Red
+
+    # Plot
+    plt.figure(figsize=(10, 4))
+    plt.subplot(1, 2, 1)
+    plt.imshow(img, cmap='gray')
+    plt.title("CT Scan")
+    plt.axis('off')
+
+    plt.subplot(1, 2, 2)
+    plt.imshow(color_mask)
+    plt.title("Ground Truth Mask")
+    plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+# 🔍 Preview one random pair
+random_idx = random.randint(0, len(train_images) - 1)
+preview_loaded_image_and_mask(train_images[random_idx], train_masks[random_idx])
+
+
 # Data Augmentation
 def augment_image_and_mask(image, mask):
     if tf.random.uniform(()) > 0.5:
@@ -220,18 +255,24 @@ def test_model(model):
     total_class_pixels = np.zeros(NUM_CLASSES)
     sample_count = 0
 
+    all_preds = []
+    all_truths = []
+
     for img_batch, mask_batch in test_dataset:
         pred_batch = model.predict(img_batch)
-        pred_labels = tf.argmax(pred_batch, axis=-1)
-        true_labels = tf.argmax(mask_batch, axis=-1)
+        pred_labels = tf.argmax(pred_batch, axis=-1).numpy()
+        true_labels = tf.argmax(mask_batch, axis=-1).numpy()
+
+        all_preds.append(pred_labels)
+        all_truths.append(true_labels)
 
         for i in range(NUM_CLASSES):
             class_mask = (true_labels == i)
-            correct_predictions = tf.reduce_sum(tf.cast((pred_labels == i) & class_mask, tf.float32))
-            total_pixels = tf.reduce_sum(tf.cast(class_mask, tf.float32))
+            correct_predictions = np.sum((pred_labels == i) & class_mask)
+            total_pixels = np.sum(class_mask)
 
-            per_class_accuracy[i] += correct_predictions.numpy()
-            total_class_pixels[i] += total_pixels.numpy()
+            per_class_accuracy[i] += correct_predictions
+            total_class_pixels[i] += total_pixels
 
         iou = iou_per_class(mask_batch, pred_batch)
         dice = dice_per_class(mask_batch, pred_batch)
@@ -243,6 +284,12 @@ def test_model(model):
     per_class_iou /= sample_count
     per_class_dice /= sample_count
     per_class_accuracy = per_class_accuracy / (total_class_pixels + 1e-6)
+
+    # Save all predicted and ground truth masks
+    all_preds = np.concatenate(all_preds, axis=0)
+    all_truths = np.concatenate(all_truths, axis=0)
+    np.save("predicted_masks.npy", all_preds)
+    np.save("ground_truth_masks.npy", all_truths)
 
     print(f"\nTest Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}")
     for i in range(NUM_CLASSES):
@@ -263,18 +310,5 @@ def test_model(model):
 
     test_random_image(model)
 
-# Build & train the model
-model = build_unet_model((IMG_HEIGHT, IMG_WIDTH, 1), NUM_CLASSES)
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-history = model.fit(train_dataset, validation_data=val_dataset, epochs=EPOCHS)
 
-# Save weights
-model.save_weights("unet_model.h5")
-
-# Plot
-plot_training_curves(history)
-
-# Recompile with Dice Loss and test
-model.compile(optimizer='adam', loss=dice_loss, metrics=['accuracy'])
-test_model(model)
